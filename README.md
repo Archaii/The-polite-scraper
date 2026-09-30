@@ -8,7 +8,7 @@ FlyRank Internship · Backend Track · Week 5 · Assignment A9
 fetch → extract → normalize → validate → store → report
 ```
 
-> Status: Stage 0 of 6. The target is classified. No scraping code exists yet.
+> Status: Stage 1 of 6. The scraper fetches catalogue page 1 once and reads the cached copy after that.
 
 ## Target classification
 
@@ -40,6 +40,7 @@ Result: **no robots file found.** A missing file is not permission. The permissi
 - `requests` for HTTP
 - `beautifulsoup4` for HTML parsing
 - `pydantic` for schema validation
+- `truststore` so HTTPS uses the operating system's certificates (see Notes)
 - Built-in `json` for output
 
 ## Setup
@@ -56,3 +57,16 @@ pip install -r requirements.txt
 ```
 python src/main.py
 ```
+
+The first run downloads the page and prints `FETCH`. Later runs read the saved copy in `cache/` and print `CACHE HIT`. Delete `cache/` to download again.
+
+## Politeness rules
+
+- **Honest user-agent:** `FlyRankInternship-A9/1.0 (+https://github.com/Archaii/The-polite-scraper)`.
+- **Timeout:** a request gives up after 10 seconds.
+- **Status check:** only `200` counts as a page. Any other status is a failed fetch, and it is never cached.
+- **Cache:** every page is saved to `cache/` and read from there on later runs, so the site sees each request once.
+
+## Notes
+
+- **Antivirus HTTPS scanning.** Some antivirus products (for example, AVG) re-sign HTTPS certificates. Python's bundled certificates then fail with `CERTIFICATE_VERIFY_FAILED`. [src/fetcher.py](src/fetcher.py) uses `truststore`, which makes Python trust the operating system's certificate store. On other machines, this has no effect.
