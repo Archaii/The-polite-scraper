@@ -5,17 +5,18 @@ Run from the project folder:
 """
 
 import hashlib
-import json
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
 
-from config import CACHE_DIR
+from config import CACHE_DIR, OUTPUT_DIR
 from discover import discover_books
 from extract import ExtractError, extract_book
 from fetcher import FetchError, fetch
+from models import validate_records
+from store import write_json
 
 
 MAX_SLUG_LENGTH = 80
@@ -57,9 +58,13 @@ def main() -> int:
         print(f"FAILED: {err}")
         return 1
 
-    if records:
-        print(json.dumps(records[0], indent=2, ensure_ascii=False))
     print(f"detail_pages={len(records)}")
+
+    books, errors = validate_records(records)
+    write_json(OUTPUT_DIR / "books.json", [book.model_dump(mode="json") for book in books])
+    write_json(OUTPUT_DIR / "errors.json", errors)
+    print(f"valid_records={len(books)}, invalid_records={len(errors)}")
+    print("wrote output/books.json and output/errors.json")
     return 0
 
 

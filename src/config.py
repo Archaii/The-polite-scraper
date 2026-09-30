@@ -20,3 +20,4 @@ MAX_CATALOGUE_PAGES = 3
 # Paths are relative to the project folder, so the script runs from any directory.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CACHE_DIR = PROJECT_ROOT / "cache"
+OUTPUT_DIR = PROJECT_ROOT / "output"

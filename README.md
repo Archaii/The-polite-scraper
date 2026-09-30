@@ -8,7 +8,7 @@ FlyRank Internship · Backend Track · Week 5 · Assignment A9
 fetch → extract → normalize → validate → store → report
 ```
 
-> Status: Stage 3 of 6. The scraper finds the 60 book URLs on catalogue pages 1–3, opens each book page, and extracts a raw record. Records are not validated or saved yet.
+> Status: Stage 4 of 6. The scraper finds the 60 book URLs on catalogue pages 1–3, extracts each book page, validates every record, and writes `output/books.json`.
 
 ## Target classification
 
@@ -64,9 +64,15 @@ The first run makes 63 requests (3 catalogue pages + 60 book pages) and takes ab
 
 ```
 catalogue_pages=3, discovered=60, unique_urls=60
-{ ...one complete raw record... }
 detail_pages=60
+valid_records=60, invalid_records=0
+wrote output/books.json and output/errors.json
 ```
+
+| File | Contents |
+|---|---|
+| `output/books.json` | The valid records, exactly 60, one per book. |
+| `output/errors.json` | Records that failed the schema, each with its `reason` and its raw values. An empty list on a clean run. |
 
 ## Raw record
 
@@ -88,6 +94,28 @@ Each book page becomes one raw record with eight fields. The values are the text
 - Every selector is scoped to the product area (`article.product_page`), so a second price elsewhere on the page can never be picked up.
 - A book without a description gets `"description": null`. Text is never invented.
 - `source_page` and `fetched_at` are the provenance: where and when the fact came from. `fetched_at` is the time of the real download. A cache hit keeps the original time.
+
+## Record schema
+
+A scraped page is untrusted input. Every raw record is normalized, then checked against the Pydantic model `Book` in [src/models.py](src/models.py) before it is stored.
+
+| Field | Type | Required | Rule |
+|---|---|---|---|
+| `title` | string | yes | not empty |
+| `product_url` | string | yes | absolute `https://` URL; the record's identity (canonical URL) |
+| `price_text` | string | yes | the raw price, e.g. `"£51.77"` |
+| `price_gbp` | number | yes | parsed from `price_text`; greater than 0 |
+| `availability_text` | string | yes | not empty |
+| `rating_text` | string | yes | one of `One`, `Two`, `Three`, `Four`, `Five` |
+| `description` | string or null | no | `null` when the page has no description |
+| `source_page` | string | yes | absolute `https://` URL of the catalogue page |
+| `fetched_at` | datetime | yes | UTC, ISO 8601 |
+
+No other fields are allowed.
+
+- **Raw and clean side by side.** `price_text` stays as scraped. `price_gbp` is the clean number a program can sort and compare.
+- **Rejected records never reach `books.json`.** A record that fails goes to `errors.json` with the reason, for example `price_gbp: Input should be a valid number`.
+- **Idempotent.** Records are keyed by `product_url`, so a book seen twice counts once. Both files are rewritten on every run, never appended to. Running the scraper twice gives the same 60 records, not 120.
 
 ## Politeness rules
 
