@@ -8,16 +8,22 @@ import sys
 
 import requests
 
-from config import CACHE_DIR, START_URL
-from fetcher import FetchError, fetch
+from discover import discover_books
+from fetcher import FetchError
 
 
 def main() -> int:
     try:
-        fetch(START_URL, CACHE_DIR / "catalogue-page-1.html")
+        discovery = discover_books()
     except (FetchError, requests.RequestException) as err:
-        print(f"FAILED {START_URL}: {err}")
+        print(f"FAILED catalogue discovery: {err}")
         return 1
+
+    print(
+        f"catalogue_pages={len(discovery.catalogue_pages)}, "
+        f"discovered={discovery.discovered}, "
+        f"unique_urls={len(discovery.book_sources)}"
+    )
     return 0
 
 

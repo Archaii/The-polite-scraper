@@ -8,7 +8,7 @@ FlyRank Internship · Backend Track · Week 5 · Assignment A9
 fetch → extract → normalize → validate → store → report
 ```
 
-> Status: Stage 1 of 6. The scraper fetches catalogue page 1 once and reads the cached copy after that.
+> Status: Stage 2 of 6. The scraper follows the catalogue's "next" links through pages 1–3 and finds the 60 book URLs.
 
 ## Target classification
 
@@ -58,12 +58,20 @@ pip install -r requirements.txt
 python src/main.py
 ```
 
-The first run downloads the page and prints `FETCH`. Later runs read the saved copy in `cache/` and print `CACHE HIT`. Delete `cache/` to download again.
+The first run downloads each page and prints `FETCH`. Later runs read the saved copies in `cache/` and print `CACHE HIT`. Delete `cache/` to download again.
+
+Expected summary:
+
+```
+catalogue_pages=3, discovered=60, unique_urls=60
+```
 
 ## Politeness rules
 
 - **Honest user-agent:** `FlyRankInternship-A9/1.0 (+https://github.com/Archaii/The-polite-scraper)`.
 - **Timeout:** a request gives up after 10 seconds.
+- **Delay:** at least 0.5 seconds between two real requests. Cache hits never wait, because they never leave the computer.
+- **Scope:** the site's own "next" links decide the pages, and the scraper stops after 3. No page or book URL is hardcoded except the first catalogue page.
 - **Status check:** only `200` counts as a page. Any other status is a failed fetch, and it is never cached.
 - **Cache:** every page is saved to `cache/` and read from there on later runs, so the site sees each request once.
 
