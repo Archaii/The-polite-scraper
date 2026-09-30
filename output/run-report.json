@@ -1,0 +1,16 @@
+{
+  "started_at": "2026-09-30T13:02:05Z",
+  "finished_at": "2026-09-30T13:02:05Z",
+  "duration_seconds": 0.38,
+  "inject_bad_url": false,
+  "catalogue_pages": 3,
+  "book_urls": 60,
+  "requests_sent": 0,
+  "pages_fetched": 0,
+  "cache_hits": 63,
+  "retries": 0,
+  "valid_records": 60,
+  "invalid_records": 0,
+  "failed_pages": 0,
+  "failures": []
+}

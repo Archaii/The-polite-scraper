@@ -8,7 +8,7 @@ FlyRank Internship · Backend Track · Week 5 · Assignment A9
 fetch → extract → normalize → validate → store → report
 ```
 
-> Status: Stage 4 of 6. The scraper finds the 60 book URLs on catalogue pages 1–3, extracts each book page, validates every record, and writes `output/books.json`.
+> Status: Stage 5 of 6. The scraper finds the 60 book URLs on catalogue pages 1–3, extracts and validates each book, writes `output/books.json`, skips a broken page without stopping, and reports every run.
 
 ## Target classification
 
@@ -67,12 +67,42 @@ catalogue_pages=3, discovered=60, unique_urls=60
 detail_pages=60
 valid_records=60, invalid_records=0
 wrote output/books.json and output/errors.json
+failed_pages=0, pages_fetched=63, cache_hits=0, duration=<seconds>s
+wrote output/run-report.json
 ```
 
 | File | Contents |
 |---|---|
 | `output/books.json` | The valid records, exactly 60, one per book. |
 | `output/errors.json` | Records that failed the schema, each with its `reason` and its raw values. An empty list on a clean run. |
+| `output/run-report.json` | What happened on the last run: counts, cache hits, failures, and duration. |
+
+### Prove that one bad page does not stop the run
+
+```
+python src/main.py --inject-bad-url
+```
+
+This adds one made-up book URL that returns `404`. The scraper logs `SKIP` for it and carries on. `books.json` still has the 60 good records, and `run-report.json` shows `"failed_pages": 1`. The test costs the site one request, because a `404` is never retried or cached.
+
+## Failures and the run report
+
+- **One page at a time.** Each book page is fetched, extracted, and validated on its own. A page that fails is logged as `SKIP`, recorded in the report, and skipped. The other 59 records survive.
+- **One retry, only when it can help.** A timeout, a connection error, or a `5xx` server error gets one more try after 2 seconds. A `404` (the page does not exist) and a `403` (the site said no) are never retried. Neither is any other status.
+- **Catalogue failure stops the run.** Without the catalogue there is no list of books. The run exits with code `1`, and `books.json` from the last good run is left untouched.
+- **A report on every run.** `output/run-report.json` is written at the end of every run, including a run that stops early.
+
+| Field | Meaning |
+|---|---|
+| `started_at`, `finished_at`, `duration_seconds` | When the run happened and how long it took |
+| `inject_bad_url` | `true` when the test URL was added |
+| `catalogue_pages`, `book_urls` | How many catalogue pages were read and book URLs were tried |
+| `requests_sent` | Every HTTP request, failures and retries included |
+| `pages_fetched` | Real downloads that returned `200` |
+| `cache_hits` | Pages read from `cache/` instead of the site |
+| `retries` | Second attempts after a timeout, connection error, or `5xx` |
+| `valid_records`, `invalid_records` | Records that passed or failed the schema |
+| `failed_pages`, `failures` | Pages that could not be fetched or read, each with its URL and reason |
 
 ## Raw record
 
@@ -124,6 +154,7 @@ No other fields are allowed.
 - **Delay:** at least 0.5 seconds between two real requests. Cache hits never wait, because they never leave the computer.
 - **Scope:** the site's own "next" links decide the pages, and the scraper stops after 3. No page or book URL is hardcoded except the first catalogue page.
 - **Status check:** only `200` counts as a page. Any other status is a failed fetch, and it is never cached.
+- **Retry:** one retry after 2 seconds, only for a timeout, a connection error, or a `5xx`. Never for `404` or `403`.
 - **Cache:** every page is saved to `cache/` and read from there on later runs, so the site sees each request once.
 
 ## Notes

@@ -15,7 +15,13 @@ truststore.inject_into_ssl()
 
 import requests  # noqa: E402
 
-from config import DELAY_SECONDS, TIMEOUT_SECONDS, USER_AGENT  # noqa: E402
+from config import (  # noqa: E402
+    DELAY_SECONDS,
+    MAX_ATTEMPTS,
+    RETRY_WAIT_SECONDS,
+    TIMEOUT_SECONDS,
+    USER_AGENT,
+)
 
 
 class FetchError(Exception):
@@ -65,25 +71,78 @@ def _fetched_at(cache_path: Path) -> str:
     return datetime.fromtimestamp(mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def fetch(url: str, cache_path: Path) -> Page:
-    """Return the page at url, reading the cached copy when one exists.
+@dataclass
+class FetchStats:
+    """Counts for the run report, kept here because every page goes through fetch()."""
 
-    Only a 200 response is saved to the cache. Anything else raises FetchError.
+    requests_sent: int = 0  # every HTTP request, failures and retries included
+    pages_fetched: int = 0  # real downloads that returned 200
+    cache_hits: int = 0
+    retries: int = 0
+
+
+stats = FetchStats()
+
+
+def _is_worth_retrying(status: int) -> bool:
+    """Only a server error (5xx) may be temporary.
+
+    A 404 means the page does not exist, and asking again will not create it.
+    A 403 means the site said no, and asking again is how a polite robot
+    becomes a pest. No other status is retried either.
     """
+    return 500 <= status <= 599
+
+
+def _get(url: str) -> requests.Response:
+    """Send one GET, waiting first so real requests stay DELAY_SECONDS apart."""
     global _last_request_at
 
-    if cache_path.exists():
-        body = cache_path.read_bytes()
-        print(f"CACHE HIT {url} ({len(body):,} bytes)")
-        return Page(url, body.decode("utf-8"), _fetched_at(cache_path), from_cache=True)
-
     _wait_politely()
+    stats.requests_sent += 1
     try:
-        response = _session.get(url, timeout=TIMEOUT_SECONDS)
+        return _session.get(url, timeout=TIMEOUT_SECONDS)
     finally:
         # Count failed requests too: they reached the site all the same.
         _last_request_at = time.monotonic()
 
+
+def _get_with_one_retry(url: str) -> requests.Response:
+    """GET url, retrying once after a timeout, a connection error, or a 5xx."""
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        is_last_attempt = attempt == MAX_ATTEMPTS
+        try:
+            response = _get(url)
+        except (requests.Timeout, requests.ConnectionError) as err:
+            if is_last_attempt:
+                raise
+            reason = type(err).__name__
+        else:
+            if is_last_attempt or not _is_worth_retrying(response.status_code):
+                return response
+            reason = f"HTTP {response.status_code}"
+
+        stats.retries += 1
+        print(f"RETRY {url} after {reason}, waiting {RETRY_WAIT_SECONDS}s")
+        time.sleep(RETRY_WAIT_SECONDS)
+
+    raise AssertionError("unreachable: the last attempt always returns or raises")
+
+
+def fetch(url: str, cache_path: Path) -> Page:
+    """Return the page at url, reading the cached copy when one exists.
+
+    Only a 200 response is saved to the cache. Anything else raises FetchError.
+    Timeouts and connection errors that survive the retry raise the requests
+    exception.
+    """
+    if cache_path.exists():
+        body = cache_path.read_bytes()
+        stats.cache_hits += 1
+        print(f"CACHE HIT {url} ({len(body):,} bytes)")
+        return Page(url, body.decode("utf-8"), _fetched_at(cache_path), from_cache=True)
+
+    response = _get_with_one_retry(url)
     if response.status_code != 200:
         raise FetchError(url, response.status_code)
 
@@ -92,5 +151,6 @@ def fetch(url: str, cache_path: Path) -> Page:
     body = response.content
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     cache_path.write_bytes(body)
+    stats.pages_fetched += 1
     print(f"FETCH {url} {response.status_code} ({len(body):,} bytes)")
     return Page(url, body.decode("utf-8"), _fetched_at(cache_path), from_cache=False)
