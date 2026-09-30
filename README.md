@@ -8,7 +8,21 @@ FlyRank Internship · Backend Track · Week 5 · Assignment A9
 fetch → extract → normalize → validate → store → report
 ```
 
-> Status: Stage 5 of 6. The scraper finds the 60 book URLs on catalogue pages 1–3, extracts and validates each book, writes `output/books.json`, skips a broken page without stopping, and reports every run.
+## Quick start
+
+Python 3.10 or newer. About 1.5 minutes from clone to output.
+
+```
+git clone https://github.com/Archaii/The-polite-scraper.git
+cd The-polite-scraper
+python -m venv .venv
+.venv\Scripts\activate          # Windows
+source .venv/bin/activate       # macOS / Linux
+pip install -r requirements.txt
+python src/main.py
+```
+
+You get `output/books.json` (60 validated records) and `output/run-report.json`.
 
 ## Target classification
 
@@ -43,31 +57,22 @@ Result: **no robots file found.** A missing file is not permission. The permissi
 - `truststore` so HTTPS uses the operating system's certificates (see Notes)
 - Built-in `json` for output
 
-## Setup
-
-```
-python -m venv .venv
-.venv\Scripts\activate          # Windows
-source .venv/bin/activate       # macOS / Linux
-pip install -r requirements.txt
-```
-
 ## Run
 
 ```
 python src/main.py
 ```
 
-The first run downloads each page and prints `FETCH`. Later runs read the saved copies in `cache/` and print `CACHE HIT`. Delete `cache/` to download again.
+The first run makes 63 requests (3 catalogue pages + 60 book pages) and prints `FETCH` for each one. It takes about a minute because of the delay between requests. Later runs read the saved copies in `cache/`, print `CACHE HIT`, and finish in under a second. Delete `cache/` to download again.
 
-The first run makes 63 requests (3 catalogue pages + 60 book pages) and takes about 40 seconds because of the delay. Expected output, after the `FETCH` / `CACHE HIT` lines:
+Expected output, after the `FETCH` / `CACHE HIT` lines:
 
 ```
 catalogue_pages=3, discovered=60, unique_urls=60
 detail_pages=60
 valid_records=60, invalid_records=0
 wrote output/books.json and output/errors.json
-failed_pages=0, pages_fetched=63, cache_hits=0, duration=<seconds>s
+failed_pages=0, pages_fetched=63, cache_hits=0, duration=58.14s
 wrote output/run-report.json
 ```
 
@@ -104,9 +109,32 @@ This adds one made-up book URL that returns `404`. The scraper logs `SKIP` for i
 | `valid_records`, `invalid_records` | Records that passed or failed the schema |
 | `failed_pages`, `failures` | Pages that could not be fetched or read, each with its URL and reason |
 
+### Proof: a real run
+
+This report comes from a fresh clone with an empty cache on 2026-09-30. It is the same file as [output/run-report.json](output/run-report.json). Clone, install, and run took 83 seconds in total.
+
+```json
+{
+  "started_at": "2026-09-30T13:12:51Z",
+  "finished_at": "2026-09-30T13:13:49Z",
+  "duration_seconds": 58.14,
+  "inject_bad_url": false,
+  "catalogue_pages": 3,
+  "book_urls": 60,
+  "requests_sent": 63,
+  "pages_fetched": 63,
+  "cache_hits": 0,
+  "retries": 0,
+  "valid_records": 60,
+  "invalid_records": 0,
+  "failed_pages": 0,
+  "failures": []
+}
+```
+
 ## Raw record
 
-Each book page becomes one raw record with eight fields. The values are the text exactly as the page shows it. Stage 4 cleans them.
+Each book page becomes one raw record with eight fields. The values are the text exactly as the page shows it. The next step, the record schema, cleans and checks them.
 
 ```json
 {
@@ -157,7 +185,39 @@ No other fields are allowed.
 - **Retry:** one retry after 2 seconds, only for a timeout, a connection error, or a `5xx`. Never for `404` or `403`.
 - **Cache:** every page is saved to `cache/` and read from there on later runs, so the site sees each request once.
 
+## Why no browser
+
+The data is already in the HTML that the server sends, so a plain HTTP request gets everything and a browser such as Playwright would only add cost: more time, more memory, and more to install.
+
+## Ethics
+
+- Use an official API when one exists. Scraping is for data that has no better door.
+- Never bypass a login, a paywall, a CAPTCHA, or a block. If a site says no, the answer is no.
+- Collect only what the task needs. This project takes 60 books from a practice site, not the whole catalogue.
+- Be a guest the site owner could find: an honest user-agent, a slow pace, and a cache so each page is asked for once.
+
+## Limitations
+
+- **The cache never expires.** Once a page is in `cache/`, the scraper never asks the site for it again. If a price changes on the site, `books.json` keeps the old value until `cache/` is deleted. `fetched_at` on every record shows how old each value is.
+- The selectors match the current layout of Books to Scrape. If the site changes its HTML, fields come back empty and the schema rejects the records into `errors.json`, so the failure is visible, but the selectors need an update.
+
+## Project layout
+
+```
+src/
+├── main.py       entry point: discover → fetch → extract → validate → store → report
+├── config.py     user-agent, timeout, delay, retry, scope, paths
+├── fetcher.py    polite HTTP: cache, delay, status check, one retry, counters
+├── discover.py   walks the catalogue "next" links, collects unique book URLs
+├── extract.py    one book page → raw record with eight fields
+├── models.py     Pydantic Book schema, price normalization, validation
+├── store.py      rewrites JSON files (never appends)
+└── report.py     run-report.json
+output/           sample output from a real run (committed)
+cache/            saved HTML (git-ignored, re-created on the first run)
+```
+
 ## Notes
 
-- **Long file names on Windows.** Some book slugs are almost 200 characters long, which breaks the 260-character path limit on Windows. Cache file names are cut to 80 characters plus a short hash of the URL.
+- **Long file names on Windows.** Some book slugs are almost 200 characters long, which breaks the 260-character path limit on Windows. Cache file names are cut to 80 characters plus a short hash of the URL. The same limit can break `pip install` (`pydantic_core`) when the project sits in a very deep folder. Clone it to a short path, or [enable long paths](https://pip.pypa.io/warnings/enable-long-paths).
 - **Antivirus HTTPS scanning.** Some antivirus products (for example, AVG) re-sign HTTPS certificates. Python's bundled certificates then fail with `CERTIFICATE_VERIFY_FAILED`. [src/fetcher.py](src/fetcher.py) uses `truststore`, which makes Python trust the operating system's certificate store. On other machines, this has no effect.
