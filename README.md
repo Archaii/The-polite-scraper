@@ -8,7 +8,7 @@ FlyRank Internship · Backend Track · Week 5 · Assignment A9
 fetch → extract → normalize → validate → store → report
 ```
 
-> Status: Stage 2 of 6. The scraper follows the catalogue's "next" links through pages 1–3 and finds the 60 book URLs.
+> Status: Stage 3 of 6. The scraper finds the 60 book URLs on catalogue pages 1–3, opens each book page, and extracts a raw record. Records are not validated or saved yet.
 
 ## Target classification
 
@@ -60,11 +60,34 @@ python src/main.py
 
 The first run downloads each page and prints `FETCH`. Later runs read the saved copies in `cache/` and print `CACHE HIT`. Delete `cache/` to download again.
 
-Expected summary:
+The first run makes 63 requests (3 catalogue pages + 60 book pages) and takes about 40 seconds because of the delay. Expected output, after the `FETCH` / `CACHE HIT` lines:
 
 ```
 catalogue_pages=3, discovered=60, unique_urls=60
+{ ...one complete raw record... }
+detail_pages=60
 ```
+
+## Raw record
+
+Each book page becomes one raw record with eight fields. The values are the text exactly as the page shows it. Stage 4 cleans them.
+
+```json
+{
+  "title": "A Light in the Attic",
+  "product_url": "https://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html",
+  "price_text": "£51.77",
+  "availability_text": "In stock (22 available)",
+  "rating_text": "Three",
+  "description": "It's hard to imagine a world without A Light in the Attic. ...",
+  "source_page": "https://books.toscrape.com/catalogue/page-1.html",
+  "fetched_at": "2026-09-30T12:44:20Z"
+}
+```
+
+- Every selector is scoped to the product area (`article.product_page`), so a second price elsewhere on the page can never be picked up.
+- A book without a description gets `"description": null`. Text is never invented.
+- `source_page` and `fetched_at` are the provenance: where and when the fact came from. `fetched_at` is the time of the real download. A cache hit keeps the original time.
 
 ## Politeness rules
 
@@ -77,4 +100,5 @@ catalogue_pages=3, discovered=60, unique_urls=60
 
 ## Notes
 
+- **Long file names on Windows.** Some book slugs are almost 200 characters long, which breaks the 260-character path limit on Windows. Cache file names are cut to 80 characters plus a short hash of the URL.
 - **Antivirus HTTPS scanning.** Some antivirus products (for example, AVG) re-sign HTTPS certificates. Python's bundled certificates then fail with `CERTIFICATE_VERIFY_FAILED`. [src/fetcher.py](src/fetcher.py) uses `truststore`, which makes Python trust the operating system's certificate store. On other machines, this has no effect.

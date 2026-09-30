@@ -25,8 +25,8 @@ def discover_books(start_url: str = START_URL, max_pages: int = MAX_CATALOGUE_PA
 
     while page_url and len(result.catalogue_pages) < max_pages:
         page_number = len(result.catalogue_pages) + 1
-        html = fetch(page_url, CACHE_DIR / f"catalogue-page-{page_number}.html")
-        soup = BeautifulSoup(html, "html.parser")
+        page = fetch(page_url, CACHE_DIR / f"catalogue-page-{page_number}.html")
+        soup = BeautifulSoup(page.html, "html.parser")
         result.catalogue_pages.append(page_url)
 
         for link in soup.select("article.product_pod h3 a[href]"):

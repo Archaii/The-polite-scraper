@@ -1,6 +1,8 @@
 """Polite HTTP fetching with a local HTML cache."""
 
 import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 import truststore
@@ -43,8 +45,28 @@ def _wait_politely() -> None:
         time.sleep(DELAY_SECONDS - elapsed)
 
 
-def fetch(url: str, cache_path: Path) -> str:
-    """Return the HTML for url, reading the cached copy when one exists.
+@dataclass
+class Page:
+    url: str
+    html: str
+    # When the page was really downloaded, as UTC ISO 8601 ("2026-09-30T12:39:05Z").
+    fetched_at: str
+    from_cache: bool
+
+
+def _fetched_at(cache_path: Path) -> str:
+    """The download time of a cached page.
+
+    The cache file is written once, right after the download, so its
+    modification time is the fetch time. A cache hit keeps the original
+    time instead of pretending the page was fetched again.
+    """
+    mtime = cache_path.stat().st_mtime
+    return datetime.fromtimestamp(mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def fetch(url: str, cache_path: Path) -> Page:
+    """Return the page at url, reading the cached copy when one exists.
 
     Only a 200 response is saved to the cache. Anything else raises FetchError.
     """
@@ -53,7 +75,7 @@ def fetch(url: str, cache_path: Path) -> str:
     if cache_path.exists():
         body = cache_path.read_bytes()
         print(f"CACHE HIT {url} ({len(body):,} bytes)")
-        return body.decode("utf-8")
+        return Page(url, body.decode("utf-8"), _fetched_at(cache_path), from_cache=True)
 
     _wait_politely()
     try:
@@ -71,4 +93,4 @@ def fetch(url: str, cache_path: Path) -> str:
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     cache_path.write_bytes(body)
     print(f"FETCH {url} {response.status_code} ({len(body):,} bytes)")
-    return body.decode("utf-8")
+    return Page(url, body.decode("utf-8"), _fetched_at(cache_path), from_cache=False)
