@@ -1,0 +1,4 @@
+# Direct dependencies only. Pip resolves the rest.
+requests==2.34.2
+beautifulsoup4==4.15.0
+pydantic==2.13.5

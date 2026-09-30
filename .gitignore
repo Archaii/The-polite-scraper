@@ -1,0 +1,16 @@
+# Saved HTML pages. Re-created on the first run, never committed.
+cache/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Local notes, not part of the project
+*.pdf
+TASKS.md
+
+# Editor and tool settings
+.vscode/
+.idea/
+.claude/
